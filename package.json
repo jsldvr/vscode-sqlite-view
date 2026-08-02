@@ -1,0 +1,239 @@
+{
+  "name": "sqlite-view",
+  "displayName": "SQLite View",
+  "description": "A complete SQLite database workbench for Visual Studio Code.",
+  "version": "0.1.0",
+  "publisher": "jsldvr",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0",
+    "node": ">=20.17.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science"
+  ],
+  "keywords": [
+    "sqlite",
+    "database",
+    "sql",
+    "sqlcipher",
+    "csv"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onView:sqliteView.connections",
+    "onCustomEditor:sqliteView.databaseEditor"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "sqliteView.addDatabase",
+        "title": "SQLite View: Add Existing Database",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sqliteView.createDatabase",
+        "title": "SQLite View: Create Database",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "sqliteView.openDatabase",
+        "title": "SQLite View: Open Database"
+      },
+      {
+        "command": "sqliteView.removeDatabase",
+        "title": "SQLite View: Remove from Library",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sqliteView.renameDatabase",
+        "title": "SQLite View: Rename Library Entry"
+      },
+      {
+        "command": "sqliteView.revealDatabase",
+        "title": "SQLite View: Reveal in File Explorer"
+      },
+      {
+        "command": "sqliteView.refresh",
+        "title": "SQLite View: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sqliteView.compactDatabase",
+        "title": "SQLite View: Compact Database"
+      },
+      {
+        "command": "sqliteView.exportSql",
+        "title": "SQLite View: Export SQL Dump"
+      },
+      {
+        "command": "sqliteView.importSql",
+        "title": "SQLite View: Import SQL Dump"
+      },
+      {
+        "command": "sqliteView.changeEncryption",
+        "title": "SQLite View: Change Encryption"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sqliteView",
+          "title": "SQLite View",
+          "icon": "media/database.svg"
+        }
+      ]
+    },
+    "views": {
+      "sqliteView": [
+        {
+          "id": "sqliteView.connections",
+          "name": "Databases"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "sqliteView.connections",
+        "contents": "No databases are registered.\n[Add Database](command:sqliteView.addDatabase)\n[Create Database](command:sqliteView.createDatabase)"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "sqliteView.databaseEditor",
+        "displayName": "SQLite View",
+        "selector": [
+          {
+            "filenamePattern": "*.db"
+          },
+          {
+            "filenamePattern": "*.db3"
+          },
+          {
+            "filenamePattern": "*.sqlite"
+          },
+          {
+            "filenamePattern": "*.sqlite3"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sqliteView.addDatabase",
+          "when": "view == sqliteView.connections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sqliteView.createDatabase",
+          "when": "view == sqliteView.connections",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sqliteView.refresh",
+          "when": "view == sqliteView.connections",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sqliteView.openDatabase",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "inline@1"
+        },
+        {
+          "command": "sqliteView.compactDatabase",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@1"
+        },
+        {
+          "command": "sqliteView.exportSql",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@2"
+        },
+        {
+          "command": "sqliteView.importSql",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@3"
+        },
+        {
+          "command": "sqliteView.changeEncryption",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@4"
+        },
+        {
+          "command": "sqliteView.renameDatabase",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@5"
+        },
+        {
+          "command": "sqliteView.revealDatabase",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@6"
+        },
+        {
+          "command": "sqliteView.removeDatabase",
+          "when": "view == sqliteView.connections && viewItem == database",
+          "group": "database@9"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SQLite View",
+      "properties": {
+        "sqliteView.pageSize": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "Rows loaded per page in the data grid."
+        },
+        "sqliteView.queryRowLimit": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "maximum": 100000,
+          "description": "Maximum rows returned by an unrestricted SQL query."
+        },
+        "sqliteView.busyTimeout": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 0,
+          "maximum": 60000,
+          "description": "Milliseconds SQLite waits for a locked database."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "lint": "eslint src test --ext .ts",
+    "test": "npm run compile && node --test out/test/**/*.test.js",
+    "prepackage": "npm run compile && npm run lint && npm test",
+    "package": "vsce package --allow-missing-repository"
+  },
+  "dependencies": {
+    "sqlite3": "^6.0.1"
+  },
+  "optionalDependencies": {
+    "@journeyapps/sqlcipher": "^6.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@types/node": "^24.1.0",
+    "@types/sqlite3": "^3.1.11",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.6.0",
+    "eslint": "^9.32.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.39.0"
+  },
+  "allowScripts": {
+    "sqlite3@6.0.1": true,
+    "@journeyapps/sqlcipher@6.0.0": true
+  }
+}
