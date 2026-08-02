@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "jsldvr",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jsldvr/vscode-sqlite-view.git"
+  },
   "engines": {
     "vscode": "^1.95.0",
     "node": ">=20.17.0"
@@ -209,12 +213,30 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p .",
+    "typecheck": "tsc --noEmit -p .",
     "watch": "tsc -watch -p .",
-    "lint": "eslint src test --ext .ts",
+    "prepare": "husky",
+    "lint": "eslint src test scripts --ext .ts,.js",
+    "lint:staged": "lint-staged",
     "test": "npm run compile && node --test out/test/**/*.test.js",
+    "test:release": "node --test test/scripts/*.test.js",
+    "release:check": "npm run compile && npm run typecheck && npm run lint && npm test && npm run test:release",
+    "release:metadata": "node scripts/release-metadata.js --output-dir .release",
     "prepackage": "npm run compile && npm run lint && npm test",
-    "package": "vsce package --allow-missing-repository"
+    "package": "vsce package",
+    "stage:sqlite3": "node scripts/stage-sqlite3-prebuild.js",
+    "package:win32-x64": "node scripts/stage-sqlite3-prebuild.js win32-x64 && vsce package --target win32-x64",
+    "package:darwin-x64": "node scripts/stage-sqlite3-prebuild.js darwin-x64 && vsce package --target darwin-x64",
+    "package:darwin-arm64": "node scripts/stage-sqlite3-prebuild.js darwin-arm64 && vsce package --target darwin-arm64",
+    "package:linux-x64": "node scripts/stage-sqlite3-prebuild.js linux-x64 && vsce package --target linux-x64",
+    "package:linux-arm64": "node scripts/stage-sqlite3-prebuild.js linux-arm64 && vsce package --target linux-arm64",
+    "package:alpine-x64": "node scripts/stage-sqlite3-prebuild.js alpine-x64 && vsce package --target alpine-x64",
+    "package:alpine-arm64": "node scripts/stage-sqlite3-prebuild.js alpine-arm64 && vsce package --target alpine-arm64"
+  },
+  "lint-staged": {
+    "*.ts": "eslint"
   },
   "dependencies": {
     "sqlite3": "^6.0.1"
@@ -229,6 +251,8 @@
     "@types/vscode": "^1.95.0",
     "@vscode/vsce": "^3.6.0",
     "eslint": "^9.32.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.39.0"
   },

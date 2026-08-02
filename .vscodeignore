@@ -1,10 +1,14 @@
 .vscode/**
+.github/**
+.husky/**
+.release/**
 .vscode-test/**
 src/**
 test/**
 out/test/**
 **/*.map
 eslint.config.mjs
+scripts/**
 tsconfig.json
 *.vsix
 .gitignore

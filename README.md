@@ -42,6 +42,24 @@ npm run package
 
 The VSIX bundles the installed Windows native SQLite runtime. Cross-platform releases must be packaged and runtime-tested on their corresponding Windows, macOS, and Linux targets.
 
+## Releases
+
+Pushing a package version to `main` runs the release workflow. The workflow requires a matching non-empty changelog heading in this form:
+
+```text
+## [0.2.0] - 2026-08-02
+```
+
+If `v0.2.0` does not already exist, the workflow verifies the project, stages SQLite's N-API binary for seven desktop targets, creates target-specific VSIX files, and publishes them in a GitHub release. Existing tags or releases are a successful no-op. Prerelease package versions such as `0.2.0-beta.1` create GitHub prereleases.
+
+Automated release artifacts guarantee standard SQLite. The optional SQLCipher runtime is excluded from the cross-platform release jobs until it has its own target-specific build and runtime validation.
+
+Local commits run TypeScript type checking and ESLint against staged TypeScript files through Husky. Run the complete release gate manually with:
+
+```bash
+npm run release:check
+```
+
 ## SQLCipher
 
 SQLCipher support is loaded from the optional `@journeyapps/sqlcipher` dependency. Version 6 currently supports source builds on macOS and Linux only; its publisher does not support Windows. On a supported platform, approve that package's install script and provide the native compiler and crypto prerequisites described by the package. If no compatible runtime is available, standard SQLite remains usable and encryption commands report that SQLCipher is unavailable.
