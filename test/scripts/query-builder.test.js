@@ -10,6 +10,19 @@ test("quotes SQLite identifiers", () => {
   assert.equal(builder.serializeProjections([{ kind: 'column', column: 'odd"name' }]), '"odd""name"');
 });
 
+test("validates selectable tables and views", () => {
+  const schema = [
+    { type: 'table', name: 'entries' },
+    { type: 'view', name: 'active_entries' },
+    { type: 'index', name: 'entries_title' },
+  ];
+  assert.equal(builder.isSelectableRelation(schema, 'entries'), true);
+  assert.equal(builder.isSelectableRelation(schema, 'active_entries'), true);
+  assert.equal(builder.isSelectableRelation(schema, ''), false);
+  assert.equal(builder.isSelectableRelation(schema, 'entries_title'), false);
+  assert.equal(builder.isSelectableRelation(schema, 'missing'), false);
+});
+
 test("selecting an explicit projection replaces star", () => {
   assert.deepEqual(
     builder.addProjection([{ kind: 'star' }], { kind: 'column', column: 'title' }),

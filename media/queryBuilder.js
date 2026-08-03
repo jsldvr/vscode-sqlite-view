@@ -10,6 +10,11 @@
     return `"${identifier.replaceAll('"', '""')}"`;
   }
 
+  function isSelectableRelation(schema, name) {
+    return typeof name === 'string' && name.length > 0 && Array.isArray(schema)
+      && schema.some(item => (item.type === 'table' || item.type === 'view') && item.name === name);
+  }
+
   function projectionKey(projection) {
     if (projection.kind === 'star') return 'star';
     if (projection.kind === 'countAll') return 'countAll';
@@ -96,6 +101,7 @@
     projectionKey,
     projectionLabel,
     projectionSuggestions,
+    isSelectableRelation,
     quoteIdentifier,
     reconcileProjections,
     removeProjection,

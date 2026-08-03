@@ -95,7 +95,10 @@
   function renderProjectionSuggestions() {
     const input = byId('projection-input'); const list = byId('projection-suggestions'); const suggestions = projectionMatches(input.value);
     clear(list); state.projectionHighlight = Math.max(0, Math.min(state.projectionHighlight, suggestions.length - 1));
-    if (suggestions.length === 0) list.append(textElement('div', 'No matching columns or counts.', 'projection-empty'));
+    if (suggestions.length === 0) {
+      const empty = textElement('div', 'No matching columns or counts.', 'projection-empty');
+      empty.setAttribute('role', 'option'); empty.setAttribute('aria-disabled', 'true'); list.append(empty);
+    }
     suggestions.forEach((suggestion, index) => {
       const option = document.createElement('button'); option.type = 'button'; option.className = `projection-option${index === state.projectionHighlight ? ' active' : ''}`; option.id = `projection-option-${index}`; option.setAttribute('role', 'option'); option.setAttribute('aria-selected', String(index === state.projectionHighlight));
       option.append(textElement('span', suggestion.label), textElement('small', suggestion.detail));
@@ -299,7 +302,9 @@
   }
 
   function buildQuery() {
-    const table = projectionBuilder.quoteIdentifier(byId('builder-table').value); const columns = projectionBuilder.serializeProjections(state.projections);
+    const tableName = byId('builder-table').value;
+    if (!projectionBuilder.isSelectableRelation(state.schema, tableName)) return toast('Select a table or view first.', true);
+    const table = projectionBuilder.quoteIdentifier(tableName); const columns = projectionBuilder.serializeProjections(state.projections);
     const where = byId('builder-where').value.trim(); const order = byId('builder-order').value.trim(); const limit = Math.max(1, Number(byId('builder-limit').value) || 100);
     byId('sql-editor').value = `SELECT ${columns}\nFROM ${table}${where ? `\nWHERE ${where}` : ''}${order ? `\nORDER BY ${order}` : ''}\nLIMIT ${limit};`;
   }
