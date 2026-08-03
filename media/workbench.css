@@ -21,7 +21,7 @@ nav button.active { border-bottom-color: var(--vscode-focusBorder); }
 .tab { display: none; height: calc(100vh - 96px); overflow: auto; padding: 12px; }
 .tab.active { display: block; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
-.toolbar label, aside label { display: flex; align-items: center; gap: 6px; }
+.toolbar label { display: flex; align-items: center; gap: 6px; }
 #grid-wrap { overflow: auto; height: calc(100% - 78px); border: 1px solid var(--vscode-panel-border); }
 table { border-collapse: collapse; width: max-content; min-width: 100%; }
 th, td { text-align: left; padding: 5px 8px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-right: 1px solid var(--vscode-panel-border); border-bottom: 1px solid var(--vscode-panel-border); }
@@ -30,12 +30,17 @@ tbody tr:hover { background: var(--vscode-list-hoverBackground); }
 tbody tr.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
 td.null { color: var(--vscode-descriptionForeground); font-style: italic; }
 footer { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px; }
-.split { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; gap: 14px; height: 100%; }
-aside { border-right: 1px solid var(--vscode-panel-border); padding-right: 14px; }
-aside label { align-items: stretch; flex-direction: column; margin-bottom: 10px; }
-.query-area { min-width: 0; display: flex; flex-direction: column; }
-#sql-editor { min-height: 170px; font-family: var(--vscode-editor-font-family); }
-#query-results { overflow: auto; flex: 1; border-top: 1px solid var(--vscode-panel-border); }
+.sql-layout { display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+.query-builder { padding-bottom: 14px; border-bottom: 1px solid var(--vscode-panel-border); }
+.query-builder-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.query-builder-fields label { display: flex; flex: 1 1 160px; flex-direction: column; align-items: stretch; gap: 6px; }
+.query-builder-fields label:nth-of-type(3), .query-builder-fields label:nth-of-type(4) { flex-grow: 2; }
+.query-builder-fields input, .query-builder-fields select { width: 100%; }
+.query-builder-fields #builder-limit { min-width: 80px; }
+.query-builder-fields button { flex: 0 0 auto; }
+.query-area { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
+#sql-editor { width: 100%; min-height: 170px; font-family: var(--vscode-editor-font-family); }
+#query-results { overflow: auto; flex: 1; min-height: 180px; border-top: 1px solid var(--vscode-panel-border); }
 .result-block { margin: 10px 0 20px; }
 .result-meta { color: var(--vscode-descriptionForeground); margin-bottom: 6px; }
 .schema-object { border: 1px solid var(--vscode-panel-border); margin-bottom: 8px; }
@@ -59,4 +64,4 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 #toast { position: fixed; right: 16px; bottom: 16px; max-width: 480px; display: none; padding: 10px 14px; background: var(--vscode-notifications-background); border: 1px solid var(--vscode-notifications-border); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
 #toast.show { display: block; }
-@media (max-width: 700px) { .split { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--vscode-panel-border); } }
+@media (max-width: 700px) { .query-builder-fields label { flex-basis: 140px; } }
