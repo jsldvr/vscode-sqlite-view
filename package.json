@@ -2,7 +2,7 @@
   "name": "sqlite-view",
   "displayName": "SQLite View",
   "description": "A complete SQLite database workbench for Visual Studio Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "jsldvr",
   "license": "MIT",
   "repository": {

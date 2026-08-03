@@ -1,9 +1,11 @@
 (function () {
   'use strict';
   const vscode = acquireVsCodeApi();
+  const projectionBuilder = globalThis.sqliteViewQueryBuilder;
+  if (!projectionBuilder) throw new Error('Query builder support failed to load.');
   let sequence = 0;
   const pending = new Map();
-  const state = { schema: [], table: '', page: 0, pageSize: 100, search: '', sort: undefined, pageData: undefined, selectedIndex: -1, resultColumns: [], resultRows: [] };
+  const state = { schema: [], table: '', page: 0, pageSize: 100, search: '', sort: undefined, pageData: undefined, selectedIndex: -1, resultColumns: [], resultRows: [], projections: [{ kind: 'star' }], projectionTable: '', projectionHighlight: 0, projectionOpen: false };
   const byId = id => document.getElementById(id);
 
   function request(type, payload = {}) {
@@ -50,7 +52,89 @@
       select.value = tables.some(table => table.name === previous) ? previous : tables[0]?.name || '';
     }
     state.table = byId('table-select').value;
+    syncProjectionsWithTable(false);
     renderSchema();
+  }
+
+  function builderColumns() {
+    const table = state.schema.find(item => (item.type === 'table' || item.type === 'view') && item.name === byId('builder-table').value);
+    return (table?.columns || []).filter(column => column.hidden === 0).map(column => column.name);
+  }
+
+  function syncProjectionsWithTable(reset) {
+    const table = byId('builder-table').value;
+    if (reset || state.projectionTable !== table) state.projections = [{ kind: 'star' }];
+    else state.projections = projectionBuilder.reconcileProjections(state.projections, builderColumns());
+    state.projectionTable = table;
+    renderProjectionPicker();
+  }
+
+  function projectionMatches(filter) {
+    const selected = new Set(state.projections.map(projectionBuilder.projectionKey));
+    const normalized = filter.trim().toLocaleLowerCase();
+    return projectionBuilder.projectionSuggestions(builderColumns()).filter(suggestion => {
+      if (selected.has(projectionBuilder.projectionKey(suggestion))) return false;
+      return !normalized || `${suggestion.label} ${suggestion.detail}`.toLocaleLowerCase().includes(normalized);
+    });
+  }
+
+  function renderProjectionPicker() {
+    const tags = byId('projection-tags');
+    clear(tags);
+    for (const projection of state.projections) {
+      const key = projectionBuilder.projectionKey(projection);
+      const chip = document.createElement('span'); chip.className = 'projection-chip';
+      const label = textElement('span', projectionBuilder.projectionLabel(projection), 'projection-chip-label'); label.title = projectionBuilder.projectionLabel(projection);
+      const remove = textElement('button', 'x', 'projection-chip-remove'); remove.type = 'button'; remove.title = `Remove ${projectionBuilder.projectionLabel(projection)}`; remove.setAttribute('aria-label', remove.title); remove.disabled = state.projections.length === 1 && projection.kind === 'star';
+      remove.addEventListener('click', () => { state.projections = projectionBuilder.removeProjection(state.projections, key); renderProjectionPicker(); });
+      chip.append(label, remove); tags.append(chip);
+    }
+    if (state.projectionOpen) renderProjectionSuggestions();
+  }
+
+  function renderProjectionSuggestions() {
+    const input = byId('projection-input'); const list = byId('projection-suggestions'); const suggestions = projectionMatches(input.value);
+    clear(list); state.projectionHighlight = Math.max(0, Math.min(state.projectionHighlight, suggestions.length - 1));
+    if (suggestions.length === 0) {
+      const empty = textElement('div', 'No matching columns or counts.', 'projection-empty');
+      empty.setAttribute('role', 'option'); empty.setAttribute('aria-disabled', 'true'); list.append(empty);
+    }
+    suggestions.forEach((suggestion, index) => {
+      const option = document.createElement('button'); option.type = 'button'; option.className = `projection-option${index === state.projectionHighlight ? ' active' : ''}`; option.id = `projection-option-${index}`; option.setAttribute('role', 'option'); option.setAttribute('aria-selected', String(index === state.projectionHighlight));
+      option.append(textElement('span', suggestion.label), textElement('small', suggestion.detail));
+      option.addEventListener('mousedown', event => event.preventDefault());
+      option.addEventListener('click', () => addProjection(suggestion)); list.append(option);
+    });
+    list.hidden = false; input.setAttribute('aria-expanded', 'true');
+    if (suggestions.length > 0) input.setAttribute('aria-activedescendant', `projection-option-${state.projectionHighlight}`); else input.removeAttribute('aria-activedescendant');
+  }
+
+  function openProjectionSuggestions() {
+    state.projectionOpen = true; state.projectionHighlight = 0; renderProjectionSuggestions();
+  }
+
+  function closeProjectionSuggestions() {
+    state.projectionOpen = false; byId('projection-suggestions').hidden = true; byId('projection-input').setAttribute('aria-expanded', 'false'); byId('projection-input').removeAttribute('aria-activedescendant');
+  }
+
+  function addProjection(projection) {
+    state.projections = projectionBuilder.addProjection(state.projections, projection); byId('projection-input').value = ''; state.projectionHighlight = 0; renderProjectionPicker(); byId('projection-input').focus();
+  }
+
+  function projectionInputKeydown(event) {
+    const input = byId('projection-input'); const suggestions = projectionMatches(input.value);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!state.projectionOpen) openProjectionSuggestions();
+      else if (suggestions.length > 0) { const direction = event.key === 'ArrowDown' ? 1 : -1; state.projectionHighlight = (state.projectionHighlight + direction + suggestions.length) % suggestions.length; renderProjectionSuggestions(); }
+    } else if (event.key === 'Enter' && state.projectionOpen && suggestions.length > 0) {
+      event.preventDefault(); addProjection(suggestions[state.projectionHighlight]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault(); closeProjectionSuggestions();
+    } else if (event.key === 'Backspace' && !input.value && state.projections.length > 0) {
+      const last = state.projections[state.projections.length - 1];
+      if (last.kind !== 'star') { event.preventDefault(); state.projections = projectionBuilder.removeProjection(state.projections, projectionBuilder.projectionKey(last)); renderProjectionPicker(); }
+    }
   }
 
   async function loadBrowse(resetPage = false) {
@@ -218,9 +302,11 @@
   }
 
   function buildQuery() {
-    const table = byId('builder-table').value.replaceAll('"', '""'); const columns = byId('builder-columns').value || '*';
+    const tableName = byId('builder-table').value;
+    if (!projectionBuilder.isSelectableRelation(state.schema, tableName)) return toast('Select a table or view first.', true);
+    const table = projectionBuilder.quoteIdentifier(tableName); const columns = projectionBuilder.serializeProjections(state.projections);
     const where = byId('builder-where').value.trim(); const order = byId('builder-order').value.trim(); const limit = Math.max(1, Number(byId('builder-limit').value) || 100);
-    byId('sql-editor').value = `SELECT ${columns}\nFROM "${table}"${where ? `\nWHERE ${where}` : ''}${order ? `\nORDER BY ${order}` : ''}\nLIMIT ${limit};`;
+    byId('sql-editor').value = `SELECT ${columns}\nFROM ${table}${where ? `\nWHERE ${where}` : ''}${order ? `\nORDER BY ${order}` : ''}\nLIMIT ${limit};`;
   }
 
   function populateChartColumns() {
@@ -243,6 +329,11 @@
   function bind() {
     byId('tabs').addEventListener('click', event => { const button = event.target.closest('button[data-tab]'); if (!button) return; document.querySelectorAll('#tabs button,.tab').forEach(element => element.classList.remove('active')); button.classList.add('active'); byId(button.dataset.tab).classList.add('active'); if (button.dataset.tab === 'log') void loadLogs(); });
     byId('table-select').addEventListener('change', () => void loadBrowse(true));
+    byId('builder-table').addEventListener('change', () => syncProjectionsWithTable(true));
+    byId('projection-input').addEventListener('focus', openProjectionSuggestions);
+    byId('projection-input').addEventListener('input', () => { state.projectionHighlight = 0; openProjectionSuggestions(); });
+    byId('projection-input').addEventListener('keydown', projectionInputKeydown);
+    byId('projection-input').addEventListener('blur', () => window.setTimeout(closeProjectionSuggestions, 100));
     byId('refresh').addEventListener('click', () => void loadBrowse());
     let searchTimer; byId('search').addEventListener('input', event => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.search = event.target.value; void loadBrowse(true); }, 300); });
     byId('previous').addEventListener('click', () => { state.page -= 1; void loadBrowse(); }); byId('next').addEventListener('click', () => { state.page += 1; void loadBrowse(); });
