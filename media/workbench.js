@@ -5,7 +5,7 @@
   if (!projectionBuilder) throw new Error('Query builder support failed to load.');
   let sequence = 0;
   const pending = new Map();
-  const state = { schema: [], table: '', page: 0, pageSize: 100, search: '', sort: undefined, pageData: undefined, selectedIndex: -1, resultColumns: [], resultRows: [], projections: [{ kind: 'star' }], projectionTable: '', projectionHighlight: 0, projectionOpen: false, projectionAliasKey: undefined };
+  const state = { schema: [], table: '', page: 0, pageSize: 100, search: '', sort: undefined, pageData: undefined, selectedIndex: -1, resultColumns: [], resultRows: [], projections: [{ kind: 'star' }], projectionTable: '', projectionHighlight: 0, projectionOpen: false };
   const byId = id => document.getElementById(id);
 
   function request(type, payload = {}) {
@@ -66,7 +66,6 @@
     if (reset || state.projectionTable !== table) state.projections = [{ kind: 'star' }];
     else state.projections = projectionBuilder.reconcileProjections(state.projections, builderColumns());
     state.projectionTable = table;
-    closeProjectionAlias();
     renderProjectionPicker();
   }
 
@@ -85,12 +84,10 @@
     for (const projection of state.projections) {
       const key = projectionBuilder.projectionKey(projection);
       const chip = document.createElement('span'); chip.className = 'projection-chip';
-      const edit = textElement('button', projectionBuilder.projectionLabel(projection), 'projection-chip-edit'); edit.type = 'button';
-      edit.title = projection.kind === 'star' ? 'All columns' : 'Edit alias'; edit.disabled = projection.kind === 'star';
-      edit.addEventListener('click', () => openProjectionAlias(key));
+      const label = textElement('span', projectionBuilder.projectionLabel(projection), 'projection-chip-label'); label.title = projectionBuilder.projectionLabel(projection);
       const remove = textElement('button', 'x', 'projection-chip-remove'); remove.type = 'button'; remove.title = `Remove ${projectionBuilder.projectionLabel(projection)}`; remove.setAttribute('aria-label', remove.title); remove.disabled = state.projections.length === 1 && projection.kind === 'star';
       remove.addEventListener('click', () => { state.projections = projectionBuilder.removeProjection(state.projections, key); renderProjectionPicker(); });
-      chip.append(edit, remove); tags.append(chip);
+      chip.append(label, remove); tags.append(chip);
     }
     if (state.projectionOpen) renderProjectionSuggestions();
   }
@@ -119,27 +116,6 @@
 
   function addProjection(projection) {
     state.projections = projectionBuilder.addProjection(state.projections, projection); byId('projection-input').value = ''; state.projectionHighlight = 0; renderProjectionPicker(); byId('projection-input').focus();
-  }
-
-  function openProjectionAlias(key) {
-    const projection = state.projections.find(item => projectionBuilder.projectionKey(item) === key);
-    if (!projection || projection.kind === 'star') return;
-    state.projectionAliasKey = key; byId('projection-alias-label').textContent = `Alias for ${projectionBuilder.projectionLabel({ ...projection, alias: undefined })}`; byId('projection-alias').value = projection.alias || ''; byId('projection-alias-editor').hidden = false; byId('projection-alias').focus(); byId('projection-alias').select();
-  }
-
-  function closeProjectionAlias() {
-    state.projectionAliasKey = undefined;
-    const editor = byId('projection-alias-editor');
-    if (editor) editor.hidden = true;
-  }
-
-  function saveProjectionAlias() {
-    if (!state.projectionAliasKey) return;
-    try {
-      state.projections = projectionBuilder.setAlias(state.projections, state.projectionAliasKey, byId('projection-alias').value); closeProjectionAlias(); renderProjectionPicker();
-    } catch (error) {
-      toast(error.message, true);
-    }
   }
 
   function projectionInputKeydown(event) {
@@ -353,9 +329,6 @@
     byId('projection-input').addEventListener('input', () => { state.projectionHighlight = 0; openProjectionSuggestions(); });
     byId('projection-input').addEventListener('keydown', projectionInputKeydown);
     byId('projection-input').addEventListener('blur', () => window.setTimeout(closeProjectionSuggestions, 100));
-    byId('save-projection-alias').addEventListener('click', saveProjectionAlias);
-    byId('cancel-projection-alias').addEventListener('click', closeProjectionAlias);
-    byId('projection-alias').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); saveProjectionAlias(); } else if (event.key === 'Escape') { event.preventDefault(); closeProjectionAlias(); } });
     byId('refresh').addEventListener('click', () => void loadBrowse());
     let searchTimer; byId('search').addEventListener('input', event => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.search = event.target.value; void loadBrowse(true); }, 300); });
     byId('previous').addEventListener('click', () => { state.page -= 1; void loadBrowse(); }); byId('next').addEventListener('click', () => { state.page += 1; void loadBrowse(); });

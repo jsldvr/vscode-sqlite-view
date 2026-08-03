@@ -4,13 +4,10 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const builder = require("../../media/queryBuilder");
 
-test("quotes SQLite identifiers and aliases", () => {
+test("quotes SQLite identifiers", () => {
   assert.equal(builder.quoteIdentifier('order'), '"order"');
   assert.equal(builder.quoteIdentifier('odd"name'), '"odd""name"');
-  assert.equal(
-    builder.serializeProjections([{ kind: 'column', column: 'odd"name', alias: 'friendly name' }]),
-    '"odd""name" AS "friendly name"',
-  );
+  assert.equal(builder.serializeProjections([{ kind: 'column', column: 'odd"name' }]), '"odd""name"');
 });
 
 test("selecting an explicit projection replaces star", () => {
@@ -24,25 +21,19 @@ test("selecting an explicit projection replaces star", () => {
   );
 });
 
-test("prevents duplicate expressions regardless of alias", () => {
-  const existing = [{ kind: 'column', column: 'title', alias: 'heading' }];
+test("prevents duplicate expressions", () => {
+  const existing = [{ kind: 'column', column: 'title' }];
   assert.deepEqual(builder.addProjection(existing, { kind: 'column', column: 'title' }), existing);
 });
 
 test("serializes row and column counts", () => {
   assert.equal(
     builder.serializeProjections([
-      { kind: 'countAll', alias: 'total' },
-      { kind: 'countColumn', column: 'title', alias: 'titled' },
+      { kind: 'countAll' },
+      { kind: 'countColumn', column: 'title' },
     ]),
-    'COUNT(*) AS "total", COUNT("title") AS "titled"',
+    'COUNT(*), COUNT("title")',
   );
-});
-
-test("adds, changes, and removes aliases", () => {
-  const selected = [{ kind: 'column', column: 'title' }];
-  assert.equal(builder.projectionLabel(builder.setAlias(selected, 'column:title', 'heading')[0]), 'title AS heading');
-  assert.deepEqual(builder.setAlias([{ ...selected[0], alias: 'heading' }], 'column:title', ''), selected);
 });
 
 test("removal and schema reconciliation fall back to star", () => {
