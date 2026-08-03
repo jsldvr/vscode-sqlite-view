@@ -177,6 +177,7 @@ export class WorkbenchProvider implements vscode.CustomReadonlyEditorProvider<Da
   private html(webview: vscode.Webview, reference: DatabaseReference): string {
     const nonce = randomNonce();
     const css = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'workbench.css'));
+    const queryBuilderJs = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'queryBuilder.js'));
     const js = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'workbench.js'));
     const title = escapeHtml(reference.name);
     return `<!doctype html>
@@ -196,7 +197,11 @@ export class WorkbenchProvider implements vscode.CustomReadonlyEditorProvider<Da
     </section>
     <section id="sql" class="tab">
       <div class="sql-layout">
-        <section class="query-builder"><h2>Query builder</h2><div class="query-builder-fields"><label>Table<select id="builder-table"></select></label><label>Columns<input id="builder-columns" value="*"></label><label>Where<input id="builder-where" placeholder="status = 'active'"></label><label>Order by<input id="builder-order"></label><label>Limit<input id="builder-limit" type="number" value="100"></label><button id="build-query">Build SQL</button></div></section>
+        <section class="query-builder"><h2>Query builder</h2><div class="query-builder-fields">
+          <label class="builder-field">Table<select id="builder-table"></select></label>
+          <div class="builder-field builder-columns-field"><span id="builder-columns-label">Columns</span><div id="builder-columns" class="projection-picker"><div id="projection-tags" class="projection-tags"></div><input id="projection-input" type="text" role="combobox" aria-labelledby="builder-columns-label" aria-controls="projection-suggestions" aria-expanded="false" aria-autocomplete="list" autocomplete="off" placeholder="Add column or count..."><div id="projection-suggestions" class="projection-suggestions" role="listbox" hidden></div></div><div id="projection-alias-editor" class="projection-alias-editor" hidden><label><span id="projection-alias-label">Alias</span><input id="projection-alias" type="text" aria-labelledby="projection-alias-label" placeholder="Optional alias"></label><button id="save-projection-alias" type="button">Apply</button><button id="cancel-projection-alias" type="button">Cancel</button></div></div>
+          <label class="builder-field builder-field-wide">Where<input id="builder-where" placeholder="status = 'active'"></label><label class="builder-field builder-field-wide">Order by<input id="builder-order"></label><label class="builder-field builder-limit-field">Limit<input id="builder-limit" type="number" value="100"></label><button id="build-query">Build SQL</button>
+        </div></section>
         <div class="query-area"><textarea id="sql-editor" spellcheck="false">SELECT name, type FROM sqlite_schema ORDER BY type, name;</textarea><div class="toolbar"><button id="run-sql" class="primary">Run SQL</button><button id="clear-sql">Clear</button><span>Ctrl+Enter to run</span></div><div id="query-results"></div></div>
       </div>
     </section>
@@ -208,6 +213,7 @@ export class WorkbenchProvider implements vscode.CustomReadonlyEditorProvider<Da
   <dialog id="row-dialog"><form method="dialog"><h2 id="row-dialog-title">Edit row</h2><div id="row-fields"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="save-row" value="default" class="primary">Save</button></div></form></dialog>
   <dialog id="schema-dialog"><form method="dialog"><h2 id="schema-dialog-title"></h2><div id="schema-fields"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="save-schema" value="default" class="primary">Create</button></div></form></dialog>
   <div id="toast" role="status"></div>
+  <script nonce="${nonce}" src="${queryBuilderJs}"></script>
   <script nonce="${nonce}" src="${js}"></script>
 </body></html>`;
   }
