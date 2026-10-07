@@ -180,38 +180,55 @@ export class WorkbenchProvider implements vscode.CustomReadonlyEditorProvider<Da
     const queryBuilderJs = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'queryBuilder.js'));
     const js = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'workbench.js'));
     const title = escapeHtml(reference.name);
+    const databasePath = escapeHtml(reference.path);
     return `<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${css}"><title>${title}</title></head>
 <body>
-  <header><div><h1>${title}</h1><span id="database-path">${escapeHtml(reference.path)}</span></div><span id="status">Opening...</span></header>
+  <header class="app-header">
+    <div class="database-identity"><h1 title="${databasePath}">${title}</h1><span id="database-path" title="${databasePath}">${databasePath}</span></div>
+    <div class="operation"><span class="operation-label">Operation</span><span id="status" data-state="busy">Opening...</span></div>
+  </header>
   <nav id="tabs" aria-label="Database tools">
     <button data-tab="browse" class="active">Browse</button><button data-tab="sql">SQL</button><button data-tab="schema">Schema</button><button data-tab="transfer">Import / Export</button><button data-tab="chart">Chart</button><button data-tab="log">Log</button>
   </nav>
   <main>
     <section id="browse" class="tab active">
-      <div class="toolbar"><label>Table <select id="table-select"></select></label><input id="search" type="search" placeholder="Search all columns"><button id="refresh">Refresh</button><button id="add-row">Add row</button><button id="delete-row" class="danger" disabled>Delete selected</button></div>
-      <div id="grid-wrap"><table id="grid"><thead></thead><tbody></tbody></table></div>
-      <footer><button id="previous">Previous</button><span id="page-info">No rows</span><button id="next">Next</button></footer>
+      <div class="toolbar">
+        <div class="toolbar-group toolbar-grow"><label class="inline-field">Table <select id="table-select"></select></label><input id="search" type="search" placeholder="Search all columns" aria-label="Search all columns"></div>
+        <div class="toolbar-group"><button id="refresh">Refresh</button><span class="toolbar-divider" aria-hidden="true"></span><button id="add-row">Add row</button><button id="delete-row" class="danger" disabled>Delete selected</button></div>
+      </div>
+      <div class="relation-bar">
+        <span id="relation-kind" class="tag"></span><span id="relation-name" class="relation-name">No table or view</span><span id="relation-access" class="tag"></span><span id="relation-key" class="meta"></span>
+      </div>
+      <div id="grid-wrap"><table id="grid" class="data-table"><thead></thead><tbody></tbody></table></div>
+      <footer class="grid-status">
+        <div class="grid-facts"><span id="page-info">No rows</span><span id="sort-info" class="meta"></span><span id="selection-info" class="meta"></span></div>
+        <div class="pager"><button id="previous">Previous</button><span id="page-number" class="meta"></span><button id="next">Next</button></div>
+      </footer>
     </section>
     <section id="sql" class="tab">
       <div class="sql-layout">
-        <section class="query-builder"><h2>Query builder</h2><div class="query-builder-fields">
+        <section class="panel query-builder"><h2>Query builder</h2><div class="query-builder-fields">
           <label class="builder-field">Table<select id="builder-table"></select></label>
           <div class="builder-field builder-columns-field"><span id="builder-columns-label">Columns</span><div id="builder-columns" class="projection-picker"><div id="projection-tags" class="projection-tags"></div><input id="projection-input" type="text" role="combobox" aria-labelledby="builder-columns-label" aria-controls="projection-suggestions" aria-expanded="false" aria-autocomplete="list" autocomplete="off" placeholder="Add column or count..."><div id="projection-suggestions" class="projection-suggestions" role="listbox" hidden></div></div></div>
           <label class="builder-field builder-field-wide">Where<input id="builder-where" placeholder="status = 'active'"></label><label class="builder-field builder-field-wide">Order by<input id="builder-order"></label><label class="builder-field builder-limit-field">Limit<input id="builder-limit" type="number" value="100"></label><button id="build-query">Build SQL</button>
         </div></section>
-        <div class="query-area"><textarea id="sql-editor" spellcheck="false">SELECT name, type FROM sqlite_schema ORDER BY type, name;</textarea><div class="toolbar"><button id="run-sql" class="primary">Run SQL</button><button id="clear-sql">Clear</button><span>Ctrl+Enter to run</span></div><div id="query-results"></div></div>
+        <div class="query-area"><textarea id="sql-editor" spellcheck="false" aria-label="SQL editor">SELECT name, type FROM sqlite_schema ORDER BY type, name;</textarea><div class="toolbar"><div class="toolbar-group"><button id="run-sql" class="primary">Run SQL</button><button id="clear-sql">Clear</button></div><span class="meta"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to run</span></div><div id="query-results"></div></div>
       </div>
     </section>
-    <section id="schema" class="tab"><div class="toolbar"><button id="create-table">Create table</button><button id="create-index">Create index</button></div><div id="schema-list"></div></section>
-    <section id="transfer" class="tab"><div class="cards"><article><h2>CSV</h2><p>Import or export the selected table using a header row.</p><button id="import-csv">Import CSV</button><button id="export-csv">Export CSV</button></article><article><h2>SQL dump</h2><p>Import or export the complete database schema and records.</p><button id="import-sql">Import SQL</button><button id="export-sql">Export SQL</button></article><article><h2>Maintenance</h2><p>Rebuild the database file and reclaim unused pages.</p><button id="compact">Compact database</button></article></div></section>
-    <section id="chart" class="tab"><div class="toolbar"><label>Label<select id="chart-label"></select></label><label>Value<select id="chart-value"></select></label><button id="draw-chart">Plot current result</button></div><canvas id="chart-canvas" width="900" height="420"></canvas><p id="chart-empty">Run a query, then choose label and numeric value columns.</p></section>
-    <section id="log" class="tab"><div class="toolbar"><button id="refresh-log">Refresh</button><button id="clear-log">Clear</button></div><div id="log-list"></div></section>
+    <section id="schema" class="tab"><div class="toolbar"><div class="toolbar-group"><button id="create-table">Create table</button><button id="create-index">Create index</button></div></div><div id="schema-list"></div></section>
+    <section id="transfer" class="tab"><div class="cards">
+      <article class="panel"><h2>CSV</h2><p>Import or export the selected table using a header row.</p><p class="meta">Table: <span id="transfer-table" class="mono">none</span></p><div class="card-actions"><button id="import-csv">Import CSV</button><button id="export-csv">Export CSV</button></div></article>
+      <article class="panel"><h2>SQL dump</h2><p>Import or export the complete database schema and records.</p><div class="card-actions"><button id="import-sql">Import SQL</button><button id="export-sql">Export SQL</button></div></article>
+      <article class="panel"><h2>Maintenance</h2><p>Rebuild the database file and reclaim unused pages.</p><div class="card-actions"><button id="compact">Compact database</button></div></article>
+    </div></section>
+    <section id="chart" class="tab"><div class="toolbar"><div class="toolbar-group"><label class="inline-field">Label<select id="chart-label"></select></label><label class="inline-field">Value<select id="chart-value"></select></label><button id="draw-chart">Plot current result</button></div></div><div class="chart-frame"><canvas id="chart-canvas" width="900" height="420"></canvas><p id="chart-empty" class="empty-state">Run a query, then choose label and numeric value columns.</p></div></section>
+    <section id="log" class="tab"><div class="toolbar"><div class="toolbar-group"><button id="refresh-log">Refresh</button><button id="clear-log">Clear</button></div></div><div id="log-list"></div></section>
   </main>
-  <dialog id="row-dialog"><form method="dialog"><h2 id="row-dialog-title">Edit row</h2><div id="row-fields"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="save-row" value="default" class="primary">Save</button></div></form></dialog>
-  <dialog id="schema-dialog"><form method="dialog"><h2 id="schema-dialog-title"></h2><div id="schema-fields"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="save-schema" value="default" class="primary">Create</button></div></form></dialog>
+  <dialog id="row-dialog"><form method="dialog"><h2 id="row-dialog-title">Edit row</h2><div id="row-fields" class="dialog-body"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="save-row" value="default" class="primary">Save</button></div></form></dialog>
+  <dialog id="schema-dialog"><form method="dialog"><h2 id="schema-dialog-title"></h2><div id="schema-fields" class="dialog-body"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="save-schema" value="default" class="primary">Create</button></div></form></dialog>
   <div id="toast" role="status"></div>
   <script nonce="${nonce}" src="${queryBuilderJs}"></script>
   <script nonce="${nonce}" src="${js}"></script>

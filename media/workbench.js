@@ -5,7 +5,7 @@
   if (!projectionBuilder) throw new Error('Query builder support failed to load.');
   let sequence = 0;
   const pending = new Map();
-  const state = { schema: [], table: '', page: 0, pageSize: 100, search: '', sort: undefined, pageData: undefined, selectedIndex: -1, resultColumns: [], resultRows: [], projections: [{ kind: 'star' }], projectionTable: '', projectionHighlight: 0, projectionOpen: false };
+  const state = { schema: [], table: '', gridTable: '', page: 0, pageSize: 100, search: '', sort: undefined, pageData: undefined, selectedIndex: -1, resultColumns: [], resultRows: [], projections: [{ kind: 'star' }], projectionTable: '', projectionHighlight: 0, projectionOpen: false };
   const byId = id => document.getElementById(id);
 
   function request(type, payload = {}) {
@@ -24,14 +24,14 @@
   });
 
   function run(operation, busy = 'Working...') {
-    setStatus(busy);
-    return operation.then(value => { setStatus('Ready'); return value; }).catch(error => { setStatus('Error'); toast(error.message, true); throw error; });
+    setStatus(busy, 'busy');
+    return operation.then(value => { setStatus('Ready', 'idle'); return value; }).catch(error => { setStatus('Error', 'error'); toast(error.message, true); throw error; });
   }
-  function setStatus(text) { byId('status').textContent = text; }
+  function setStatus(text, phase) { const element = byId('status'); element.textContent = text; element.dataset.state = phase; }
   function toast(text, error = false) {
     const element = byId('toast');
     element.textContent = text;
-    element.style.borderColor = error ? 'var(--vscode-errorForeground)' : '';
+    element.classList.toggle('error', error);
     element.classList.add('show');
     window.setTimeout(() => element.classList.remove('show'), 4500);
   }
@@ -141,36 +141,101 @@
     state.table = byId('table-select').value;
     if (!state.table) { renderGrid({ columns: [], rows: [], totalRows: 0, page: 0, pageSize: state.pageSize, editable: false, locatorColumns: [] }); return; }
     if (resetPage) state.page = 0;
-    const page = await run(request('browse', { table: state.table, page: state.page, pageSize: state.pageSize, search: state.search, sort: state.sort }), 'Loading rows...');
+    renderRelationIdentity(); renderRelationAccess('Loading', 'pending', '');
+    const page = await run(request('browse', { table: state.table, page: state.page, pageSize: state.pageSize, search: state.search, sort: state.sort }), 'Loading rows...')
+      .catch(error => { renderRelationAccess('Not loaded', 'failed', loadFailureNote()); throw error; });
     state.pageData = page; state.selectedIndex = -1; renderGrid(page);
   }
 
   function renderGrid(page) {
     const head = byId('grid').tHead; const body = byId('grid').tBodies[0]; clear(head); clear(body);
     const visible = page.columns.filter(column => column.hidden === 0);
+    const sort = activeSort(visible);
+    const keyCount = visible.filter(column => column.primaryKeyOrder).length;
     const headerRow = head.insertRow();
+    headerRow.append(gutterHeader());
     for (const column of visible) {
-      const th = document.createElement('th');
-      th.textContent = column.name + (state.sort?.column === column.name ? (state.sort.direction === 'ASC' ? ' ASC' : ' DESC') : '');
-      th.title = [column.type, column.primaryKeyOrder ? 'Primary key' : '', column.notNull ? 'Not null' : ''].filter(Boolean).join(', ');
+      const th = columnHeader(column, sort?.column === column.name ? sort.direction : '', keyCount);
       th.addEventListener('click', () => { state.sort = { column: column.name, direction: state.sort?.column === column.name && state.sort.direction === 'ASC' ? 'DESC' : 'ASC' }; void loadBrowse(true); });
       headerRow.append(th);
     }
     page.rows.forEach((row, index) => {
       const tr = body.insertRow();
-      tr.addEventListener('click', () => { [...body.rows].forEach(item => item.classList.remove('selected')); tr.classList.add('selected'); state.selectedIndex = index; byId('delete-row').disabled = !page.editable; });
+      tr.addEventListener('click', () => { [...body.rows].forEach(item => item.classList.remove('selected')); tr.classList.add('selected'); state.selectedIndex = index; byId('delete-row').disabled = !page.editable; byId('selection-info').textContent = `Row ${rowNumber(page, index)} selected`; });
       tr.addEventListener('dblclick', () => page.editable && openRowDialog(false, row));
+      tr.append(textElement('td', String(rowNumber(page, index)), 'row-gutter'));
       for (const column of visible) {
-        const td = tr.insertCell(); const value = row[column.name]; td.textContent = display(value); td.title = display(value); if (value === null) td.className = 'null';
+        const td = tr.insertCell(); const value = row[column.name]; td.textContent = display(value); td.title = display(value);
+        td.classList.toggle('null', value === null); td.classList.toggle('blob', value?.type === 'blob'); td.classList.toggle('numeric', isNumericColumn(column));
       }
     });
+    if (page.rows.length === 0) renderEmptyGrid(body, visible.length + 1);
     const start = page.totalRows === 0 ? 0 : page.page * page.pageSize + 1;
     const end = Math.min(page.totalRows, (page.page + 1) * page.pageSize);
-    byId('page-info').textContent = `${start}-${end} of ${page.totalRows}`;
+    byId('page-info').textContent = page.totalRows === 0 ? 'No rows' : `Rows ${start}-${end} of ${page.totalRows}${state.search ? ' matching search' : ''}`;
+    byId('page-number').textContent = `Page ${page.page + 1} of ${Math.max(1, Math.ceil(page.totalRows / page.pageSize))}`;
+    byId('sort-info').textContent = sort ? `Sorted by ${sort.column} ${sort.direction === 'ASC' ? 'ascending' : 'descending'}` : 'Unsorted';
+    byId('selection-info').textContent = 'No row selected';
     byId('previous').disabled = page.page === 0;
     byId('next').disabled = end >= page.totalRows;
     byId('add-row').disabled = !page.editable;
     byId('delete-row').disabled = true;
+    state.gridTable = state.table;
+    renderRelationIdentity(); renderRelationAccess(page.editable ? 'Editable' : 'Read-only', page.editable ? 'editable' : 'readonly', accessNote(page));
+  }
+
+  /** Returns the sort only when it applies to a visible column of the current relation, matching what the host applies. */
+  function activeSort(visible) {
+    return state.sort && visible.some(column => column.name === state.sort.column) ? state.sort : undefined;
+  }
+  function columnTraits(column) { return [column.type, column.primaryKeyOrder ? 'Primary key' : '', column.notNull ? 'Not null' : ''].filter(Boolean).join(', '); }
+  function rowNumber(page, index) { return page.page * page.pageSize + index + 1; }
+  function isNumericColumn(column) { return /INT|REAL|FLOA|DOUB|NUM|DEC/i.test(column.type); }
+  function gutterHeader() {
+    const th = textElement('th', '#', 'row-gutter'); th.scope = 'col'; th.title = 'Row number'; th.setAttribute('aria-label', 'Row number');
+    return th;
+  }
+  function columnHeader(column, direction, keyCount) {
+    const th = document.createElement('th'); th.scope = 'col'; th.classList.toggle('numeric', isNumericColumn(column));
+    th.title = columnTraits(column);
+    const title = document.createElement('span'); title.className = 'column-title'; title.append(textElement('span', column.name, 'column-name'));
+    if (direction) { th.setAttribute('aria-sort', direction === 'ASC' ? 'ascending' : 'descending'); title.append(textElement('span', direction, `sort-tag sort-${direction.toLowerCase()}`)); }
+    const meta = document.createElement('span'); meta.className = 'column-meta'; meta.append(textElement('span', column.type || 'untyped', 'column-type'));
+    if (column.primaryKeyOrder) meta.append(textElement('span', keyCount > 1 ? `PK ${column.primaryKeyOrder}` : 'PK', 'key-tag'));
+    th.append(title, meta);
+    return th;
+  }
+  function renderEmptyGrid(body, span) {
+    const cell = body.insertRow().insertCell(); cell.colSpan = span; cell.className = 'empty-state'; cell.textContent = emptyGridMessage();
+  }
+  function emptyGridMessage() {
+    if (!state.table) return 'No table or view to browse.';
+    if (state.search) return 'No rows match the search.';
+    return 'This relation has no rows.';
+  }
+  function relationKind() {
+    return state.schema.find(item => (item.type === 'table' || item.type === 'view') && item.name === state.table)?.type || '';
+  }
+  /** Names the selected relation as soon as it is chosen, so labels and Transfer never describe a previous selection. */
+  function renderRelationIdentity() {
+    const kind = relationKind();
+    byId('relation-kind').textContent = kind.toUpperCase(); byId('relation-kind').hidden = !kind;
+    byId('relation-name').textContent = state.table || 'No table or view';
+    byId('transfer-table').textContent = state.table || 'none';
+  }
+  function renderRelationAccess(label, phase, note) {
+    const access = byId('relation-access'); access.hidden = !state.table; access.textContent = label; access.dataset.state = phase;
+    byId('relation-key').textContent = note;
+  }
+  function accessNote(page) {
+    if (!state.table) return '';
+    if (page.editable) return `Row key: ${page.locatorColumns.map(column => column === '__sqlite_view_rowid__' ? 'rowid' : column).join(', ')}. Double-click a row to edit.`;
+    return relationKind() === 'view' ? 'Views are browsed read-only.' : 'No row key is available for editing.';
+  }
+  function loadFailureNote() {
+    if (!state.gridTable) return 'Rows could not be loaded.';
+    if (state.gridTable !== state.table) return `Rows could not be loaded. The grid still shows ${state.gridTable}.`;
+    return 'Rows could not be reloaded. The grid shows the last loaded page.';
   }
 
   function rowLocator(row) {
@@ -181,7 +246,7 @@
     byId('row-dialog-title').textContent = inserting ? `Add row to ${state.table}` : `Edit row in ${state.table}`;
     for (const column of state.pageData.columns.filter(item => item.hidden === 0)) {
       const wrapper = document.createElement('label'); wrapper.className = 'field';
-      wrapper.append(textElement('span', column.name));
+      const caption = document.createElement('span'); caption.className = 'field-label'; caption.append(textElement('span', column.name, 'mono'), textElement('small', columnTraits(column))); wrapper.append(caption);
       const input = document.createElement('input'); input.dataset.column = column.name; input.value = row[column.name] === null || row[column.name] === undefined || row[column.name]?.type === 'blob' ? '' : String(row[column.name]); input.disabled = row[column.name]?.type === 'blob'; wrapper.append(input);
       const nullLabel = textElement('label', ' NULL'); const nullBox = document.createElement('input'); nullBox.type = 'checkbox'; nullBox.dataset.nullFor = column.name; nullBox.checked = !inserting && row[column.name] === null; nullBox.addEventListener('change', () => input.disabled = nullBox.checked || row[column.name]?.type === 'blob'); nullLabel.prepend(nullBox); wrapper.append(nullLabel); fields.append(wrapper);
     }
@@ -217,34 +282,49 @@
   }
   function renderResults(results) {
     const container = byId('query-results'); clear(container);
-    for (const result of results) {
-      const block = document.createElement('div'); block.className = 'result-block';
-      block.append(textElement('div', `${result.rows.length} rows, ${result.changes} changes, ${result.elapsedMs.toFixed(1)} ms${result.truncated ? ', truncated' : ''}`, 'result-meta'));
-      if (result.columns.length) block.append(buildTable(result.columns, result.rows));
+    results.forEach((result, index) => {
+      const block = document.createElement('section'); block.className = 'result-block';
+      const meta = document.createElement('div'); meta.className = 'result-meta';
+      meta.append(textElement('span', `Statement ${index + 1}`, 'result-label'), textElement('span', `${result.rows.length} rows`), textElement('span', `${result.changes} changes`), textElement('span', `${result.elapsedMs.toFixed(1)} ms`));
+      if (result.truncated) meta.append(textElement('span', 'Truncated', 'tag tag-warning'));
+      block.append(meta);
+      if (result.columns.length) block.append(scrollFrame(buildTable(result.columns, result.rows)));
       container.append(block);
-    }
+    });
     const lastRows = [...results].reverse().find(result => result.rows.length > 0);
     if (lastRows) { state.resultColumns = lastRows.columns; state.resultRows = lastRows.rows; populateChartColumns(); }
   }
   function buildTable(columns, rows) {
-    const table = document.createElement('table'); const head = table.createTHead().insertRow(); const body = table.createTBody();
-    columns.forEach(column => head.append(textElement('th', column)));
-    rows.forEach(row => { const tr = body.insertRow(); columns.forEach(column => { const td = tr.insertCell(); td.textContent = display(row[column]); }); });
+    const table = document.createElement('table'); table.className = 'data-table'; const head = table.createTHead().insertRow(); const body = table.createTBody();
+    columns.forEach(column => { const th = textElement('th', column); th.scope = 'col'; head.append(th); });
+    rows.forEach(row => { const tr = body.insertRow(); columns.forEach(column => { const td = tr.insertCell(); td.textContent = display(row[column]); td.classList.toggle('null', row[column] === null); }); });
     return table;
+  }
+  function scrollFrame(content) {
+    const frame = document.createElement('div'); frame.className = 'table-frame'; frame.append(content);
+    return frame;
   }
 
   function renderSchema() {
     const container = byId('schema-list'); clear(container);
     for (const object of state.schema) {
       const details = document.createElement('details'); details.className = 'schema-object';
-      const summary = document.createElement('summary'); summary.textContent = `${object.type.toUpperCase()} ${object.name}`; details.append(summary);
-      if (object.columns) {
-        const columns = textElement('p', object.columns.map(column => `${column.name} ${column.type}${column.primaryKeyOrder ? ' PK' : ''}${column.notNull ? ' NOT NULL' : ''}`).join(', ')); columns.style.padding = '0 10px'; details.append(columns);
-      }
+      details.append(schemaSummary(object));
+      if (object.columns) details.append(scrollFrame(buildTable(['Column', 'Type', 'Key', 'Not null'], object.columns.map(schemaColumnRow))));
       details.append(textElement('pre', object.sql || '(implicit object)'));
       if (object.sql) { const actions = document.createElement('div'); actions.className = 'schema-actions'; if (object.type === 'table') { const modify = textElement('button', 'Modify table'); modify.addEventListener('click', () => openAlterDialog(object)); actions.append(modify); } const drop = textElement('button', `Drop ${object.type}`, 'danger'); drop.addEventListener('click', () => dropObject(object)); actions.append(drop); details.append(actions); }
       container.append(details);
     }
+  }
+  function schemaSummary(object) {
+    const summary = document.createElement('summary');
+    summary.append(textElement('span', object.type.toUpperCase(), 'tag'), textElement('span', object.name, 'schema-name'));
+    if (object.tableName && object.tableName !== object.name) summary.append(textElement('span', `on ${object.tableName}`, 'meta'));
+    if (object.columns) summary.append(textElement('span', `${object.columns.length} columns`, 'meta'));
+    return summary;
+  }
+  function schemaColumnRow(column) {
+    return { Column: column.name, Type: column.type, Key: column.primaryKeyOrder ? 'PK' : '', 'Not null': column.notNull ? 'NOT NULL' : '' };
   }
   async function dropObject(object) {
     try { const result = await run(request('dropObject', { objectType: object.type, name: object.name }), `Dropping ${object.name}...`); applySchema(result.schema); await loadBrowse(true); toast(`${object.name} dropped.`); } catch (_) { /* error already shown */ }
@@ -323,7 +403,15 @@
 
   async function loadLogs() {
     const logs = await run(request('logs'), 'Loading log...'); const container = byId('log-list'); clear(container);
-    logs.forEach(log => { const entry = document.createElement('div'); entry.className = `log-entry ${log.status}`; entry.append(textElement('div', `${log.timestamp} | ${log.elapsedMs.toFixed(1)} ms | ${log.status.toUpperCase()}`, 'log-meta'), textElement('div', log.sql)); if (log.params.length) entry.append(textElement('div', `Parameters: ${JSON.stringify(log.params)}`, 'log-meta')); if (log.error) entry.append(textElement('div', log.error)); container.append(entry); });
+    if (logs.length === 0) container.append(textElement('p', 'No statements logged.', 'empty-state'));
+    logs.forEach(log => {
+      const entry = document.createElement('div'); entry.className = `log-entry ${log.status}`;
+      const meta = document.createElement('div'); meta.className = 'log-meta'; meta.append(textElement('span', log.status.toUpperCase(), `tag log-status-${log.status}`), textElement('span', log.timestamp), textElement('span', `${log.elapsedMs.toFixed(1)} ms`));
+      entry.append(meta, textElement('div', log.sql, 'log-sql'));
+      if (log.params.length) entry.append(textElement('div', `Parameters: ${JSON.stringify(log.params)}`, 'log-meta'));
+      if (log.error) entry.append(textElement('div', log.error, 'log-error'));
+      container.append(entry);
+    });
   }
 
   function bind() {
